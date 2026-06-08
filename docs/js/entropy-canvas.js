@@ -147,3 +147,6 @@ export function initEntropyCanvas(canvasEl) {
     if (animId) cancelAnimationFrame(animId);
   };
 }
+
+
+// Fix applied
