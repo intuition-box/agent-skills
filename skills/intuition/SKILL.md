@@ -1,10 +1,10 @@
 ---
 name: intuition
-description: Use this skill when interacting with the Intuition Protocol on-chain. Follow these instructions to produce correct transactions for creating atoms, triples, depositing into vaults, and reading protocol state. Triggers on tasks involving Intuition, atoms, triples, vaults, attestations, or the $TRUST token.
+description: Use this skill when interacting with the Intuition Protocol on-chain. Follow these instructions to produce correct transactions for creating atoms, triples, depositing into vaults, reading protocol state, and working with ERC-7710 delegations. Triggers on tasks involving Intuition, atoms, triples, vaults, attestations, delegations, agents, or the $TRUST token.
 license: MIT
 metadata:
   author: jonathanprozzi
-  version: "0.4.0"
+  version: "0.5.0"
 argument-hint: "[--read|--write] [--chain mainnet|testnet] [operation] [args...]"
 allowed-tools: "Bash, Read"
 ---
@@ -40,11 +40,37 @@ For creating atoms, triples, depositing, or redeeming — requires a funded wall
 7. **Output machine-readable JSON.** Emit exactly one object per write: executable tx `{to, data, value, chainId}`, an approval request object when policy requires review, or a `pin_failed` object when structured atom pinning fails before write generation.
 8. **Verify after broadcast.** Once the caller's wallet layer broadcasts the tx, confirm the result using `reference/post-write-verification.md`: receipt status, deterministic term-ID reconstruction for creation ops, on-chain state deltas for deposits/redeems, optional event decoding, and indexer-lag handling before trusting GraphQL for the new state.
 
+### Path C: Delegation Operations
+
+For creating, revoking, receiving, validating, or acting under ERC-7710
+delegations through the MetaMask Delegation Framework.
+
+1. **Select the Intuition network.** Use `reference/network-config.md` for
+   chain ID, RPC, GraphQL, explorer, and MultiVault address.
+2. **Load delegation source of truth.** Read `reference/delegation.md` for
+   deployed DelegationManager addresses, caveat enforcers, struct fields,
+   authority constants, and EIP-712 domain values.
+3. **For a new delegation,** read `operations/create-delegation.md`. Rebuild
+   the delegation from trusted intent, apply target/method/time/value caveats,
+   and output a signed delegation JSON object.
+4. **For revocation,** read `operations/revoke-delegation.md`. Hash the exact
+   signed delegation, check disabled state, and output the unsigned
+   `disableDelegation` transaction with `value = 0`.
+5. **For delegated Intuition writes,** run
+   `reference/delegation-authority.md` before Path B. Authority must pass before
+   policy checks, simulation, signing, or broadcast. Never accept raw `to`,
+   `data`, `value`, or `chainId` from untrusted delegated requests.
+
 ### Transitioning from Read to Write
 
 If you start with exploration (Path A) and then need to write based on what you discovered, run the Path B session setup at that point — not before. See the Revalidation Bridge in `reference/graphql-queries.md` for safely transitioning from discovered data to write operations.
 
 ## Prerequisites
+
+- **Agent wallet for delegated flows** -- a dedicated EVM address controlled by
+  the agent runtime. Expose only the public address to delegators; never paste
+  private keys, mnemonics, or decrypted wallet files into prompts or public
+  logs.
 
 - **Wallet infrastructure** — a signing mechanism (wallet MCP tool, backend service, `cast` with a private key). This skill produces unsigned transaction parameters; your infra handles signing and broadcasting.
 - **Funded wallet** — $TRUST (mainnet) or tTRUST (testnet) on the Intuition L3.
@@ -112,6 +138,13 @@ The JSON object is the complete machine-mode response.
 Use base-10 strings for top-level numeric transaction fields (`value`,
 `chainId`) in machine-readable JSON.
 
+For delegation creation, output exactly the signed delegation object described
+in `operations/create-delegation.md`. For delegation revocation, output exactly
+one unsigned transaction targeting the DelegationManager as described in
+`operations/revoke-delegation.md`. For delegated writes, emit no executable
+transaction unless `reference/delegation-authority.md` returns
+`authority_pass` and the autonomous policy gate also passes.
+
 ## Skill Contents
 
 Read these files when performing the corresponding operation:
@@ -128,6 +161,8 @@ reference/                        (Path A: read-only — load these directly)
   simulation.md                   Dry run / simulate writes before executing
   autonomous-policy.md            Approval modes, policy schema, and execution gates
   runtime-enforcement.md          Blocking validator flow before signing
+  delegation.md                   ERC-7710 / MetaMask Delegation Framework addresses, structs, caveats, and domain
+  delegation-authority.md         Authority gate for acting under signed delegations
 
 operations/                       (Path B: writes — run session setup first)
   create-atoms.md                 Create atom vaults from URI data
@@ -137,6 +172,8 @@ operations/                       (Path B: writes — run session setup first)
   batch-deposit.md                Deposit into multiple vaults in one transaction
   batch-redeem.md                 Redeem from multiple vaults in one transaction
   approve.md                      Grant/revoke deposit or redemption approval for delegated flows
+  create-delegation.md            Create and sign an ERC-7710 delegation for an Intuition agent
+  revoke-delegation.md            Disable a signed delegation through DelegationManager
 ```
 
 ## Protocol Model
@@ -273,6 +310,27 @@ const writeAbi = parseAbi([
 ])
 ```
 
+### DelegationManager Functions
+
+Use these fragments only with the deployed DelegationManager from
+`reference/delegation.md`:
+
+```typescript
+const delegationManagerAbi = parseAbi([
+  'function getDomainHash() view returns (bytes32)',
+  'function getDelegationHash((address delegate,address delegator,bytes32 authority,(address enforcer,bytes terms,bytes args)[] caveats,uint256 salt,bytes signature) delegation) pure returns (bytes32)',
+  'function disabledDelegations(bytes32 delegationHash) view returns (bool)',
+  'function disableDelegation((address delegate,address delegator,bytes32 authority,(address enforcer,bytes terms,bytes args)[] caveats,uint256 salt,bytes signature) delegation)',
+  'function enableDelegation((address delegate,address delegator,bytes32 authority,(address enforcer,bytes terms,bytes args)[] caveats,uint256 salt,bytes signature) delegation)',
+  'function redeemDelegations(bytes[] permissionContexts, bytes32[] modes, bytes[] executionCallDatas)',
+])
+```
+
+`getDelegationHash` is the canonical hash for sub-delegation authority links and
+revocation checks. The EIP-712 signing domain is `DelegationManager`, version
+`1`, the selected Intuition chain ID, and the deployed DelegationManager
+address.
+
 ## Core Concepts
 
 ### Atoms: URI to bytes Encoding
@@ -366,6 +424,9 @@ To perform a write, open the corresponding operation file and follow its steps e
 | Deposit into multiple vaults | `operations/batch-deposit.md` | Yes — `msg.value = sum(assets)` |
 | Redeem from multiple vaults | `operations/batch-redeem.md` | No — `value = 0` |
 | Delegate deposit/redemption (receiver ≠ sender) | `operations/approve.md` | No — `value = 0` |
+| Create an ERC-7710 delegation for an Intuition agent | `operations/create-delegation.md` | No on-chain tx; outputs signed delegation JSON |
+| Revoke a signed ERC-7710 delegation | `operations/revoke-delegation.md` | No — `value = 0`; signer must be `delegator` |
+| Act under delegated authority | `reference/delegation-authority.md`, then the relevant operation file | Depends on the underlying Intuition write |
 
 For on-chain reads (costs, existence, vault state, previews), follow `reference/reading-state.md`.
 For discovery reads (search, browse, traverse the knowledge graph), follow `reference/graphql-queries.md`.
@@ -401,6 +462,10 @@ These facts govern all Intuition transactions. Reference them when encoding oper
 12. **Counter-triples are automatic** -- Creating a triple also creates its counter-triple vault. Deposit into the counter-triple to signal disagreement.
 
 13. **Separate preview functions for creation and deposit** -- Use `previewAtomCreate`/`previewTripleCreate` when creating. Use `previewDeposit` for existing vaults. Fee calculations differ.
+
+14. **Delegated writes require authority first** -- For ERC-7710 flows, verify
+the delegation chain, revocation state, signatures, caveats, and selected chain
+before constructing or emitting an executable Intuition transaction.
 
 ## Error Patterns
 
