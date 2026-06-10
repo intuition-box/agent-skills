@@ -78,11 +78,29 @@ CALLDATA=$(cast calldata "createAtoms(bytes[],uint256[])" "[$ATOM_DATA]" "[$ATOM
 jq -n --arg to "$MULTIVAULT" --arg data "$CALLDATA" --arg value "$ATOM_COST" --arg chainId "$CHAIN_ID" '{to:$to,data:$data,value:$value,chainId:$chainId}'
 ```
 
+## Delegation Operations
+
+The skill supports ERC-7710 delegation flows for Intuition agents through the
+MetaMask Delegation Framework:
+
+- `reference/delegation.md`: deployed DelegationManager addresses, common caveat
+  enforcers, EIP-712 domain values, and agent-wallet safety rules.
+- `operations/create-delegation.md`: create a signed delegation object for an
+  agent, bounded by target, method, time, and value caveats.
+- `operations/revoke-delegation.md`: build the unsigned `disableDelegation`
+  transaction for a signed delegation.
+- `reference/delegation-authority.md`: validate a delegation chain before any
+  delegated Intuition write.
+
+Delegated writes still use the normal operation docs after the authority gate
+passes. Do not accept untrusted raw `to`, `data`, `value`, or `chainId` fields
+as a substitute for trusted intent reconstruction.
+
 ## What the Skill Installs
 
 - `SKILL.md`: canonical machine-facing contract, invariants, and output shape.
-- `operations/`: write-specific encoding flows for create, deposit, redeem, batch, and approvals.
-- `reference/`: read queries, network config, GraphQL, pinning, config semantics, verification, and nested-triple composition guidance.
+- `operations/`: write-specific encoding flows for create, deposit, redeem, batch, approvals, delegation creation, and delegation revocation.
+- `reference/`: read queries, network config, GraphQL, pinning, config semantics, verification, delegation authority, and nested-triple composition guidance.
 - `README.md`: operator-facing onboarding and first-success flows.
 
 The skill also supports creating nested triples: triples whose subject,
@@ -104,6 +122,8 @@ For unattended execution, policy guardrails and runtime validation live in [refe
 - [reference/network-config.md](./reference/network-config.md)
 - [reference/schemas.md](./reference/schemas.md)
 - [reference/post-write-verification.md](./reference/post-write-verification.md)
+- [reference/delegation.md](./reference/delegation.md)
+- [reference/delegation-authority.md](./reference/delegation-authority.md)
 - [Intuition V2 Contracts](https://github.com/0xIntuition/intuition-v2/tree/main/contracts/core)
 
 ## License

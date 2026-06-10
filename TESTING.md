@@ -44,6 +44,7 @@ Artifacts:
 - `tests/prompts/b1-validation-prompts.md`
 - `tests/prompts/b1-graphql-prompts.md`
 - `tests/prompts/b1-nested-triple-prompts.md`
+- `tests/prompts/b1-delegation-prompts.md`
 
 ### Layer B2: On-Chain Integration (Broadcast)
 
