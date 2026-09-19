@@ -44,5 +44,12 @@
       "0xb0681668ca193e8608b43adea19fecbbe0828ef5afc941cef257d30a20564ef1"
     ],
     "minConfidence": 0.7
+  },
+  "delegation": {
+    "mode": "direct",
+    "mainAccountAddress": null,
+    "smartAccountAddress": null,
+    "requireApprovalCheck": true,
+    "dailyBudgetWei": "100000000000000000000"
   }
 }

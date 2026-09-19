@@ -203,3 +203,40 @@ distinction matters. `isTriple(termId)` is only a coarse read and returns
 `true` for counter-triples too.
 
 For the semantics of the other config reads (`getGeneralConfig`, `getAtomConfig`, `getTripleConfig`, `getVaultFees`, `getBondingCurveConfig`) — which fields constrain tx generation versus which are informational — see `reference/config-fields.md`.
+
+## Pre-flight Checks (Delegation and Write Operations)
+
+Before any write or delegation operation, verify that the target contracts exist on-chain. This prevents silent ETH transfers to EOAs and cryptic revert messages.
+
+### MultiVault Contract Check
+
+```bash
+# Verify MultiVault is a contract (not an EOA)
+cast code $MULTIVAULT --rpc-url $RPC
+
+# If the output is 0x, the address is an EOA. BLOCKED — do not broadcast.
+# If the output is non-empty, the address is a contract. Proceed.
+```
+
+> **Critical:** The Mainnet MultiVault address (`0x6E35cF57A41fA15eA0EaE9C33e751b01A784Fe7e`) is an EOA. All Path B writes and delegation redemptions targeting that address will fail silently as plain ETH transfers. Use testnet for all write testing until a valid mainnet MultiVault is deployed.
+
+### DelegationManager Contract Check
+
+```bash
+# Verify DelegationManager has bytecode
+cast code $DELEGATION_MANAGER --rpc-url $RPC
+
+# Verify disabledDelegations function exists and responds correctly
+# First compute a random hash to test with
+TEST_HASH=$(cast keccak "$(cast --from-utf8 "test")")
+cast call $DELEGATION_MANAGER "disabledDelegations(bytes32)(bool)" "$TEST_HASH" --rpc-url $RPC
+# Should return false (0x0000000000000000000000000000000000000000000000000000000000000000)
+# If it reverts or returns true for a random hash, the function may not exist or the address is wrong.
+```
+
+### Quick Health Matrix
+
+| Network | MultiVault | DelegationManager | Status |
+|---------|-----------|-------------------|--------|
+| Mainnet (1155) | ⚠️ EOA — writes blocked | ✅ Contract | Use testnet for writes |
+| Testnet (13579) | ✅ Contract | ✅ Contract | Fully operational |
