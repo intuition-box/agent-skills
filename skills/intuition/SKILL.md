@@ -1,17 +1,18 @@
 ---
 name: intuition
-description: Use this skill when interacting with the Intuition Protocol on-chain. Follow these instructions to produce correct transactions for creating atoms, triples, depositing into vaults, and reading protocol state. Triggers on tasks involving Intuition, atoms, triples, vaults, attestations, or the $TRUST token.
+description: Use this skill when interacting with the Intuition Protocol on-chain, and whenever a wallet REJECTS an Intuition delegation signature. Follow these instructions to produce correct transactions for creating atoms, triples, depositing into vaults, withdrawing shares, reading protocol state, and managing delegated authority. Triggers on tasks involving Intuition, atoms, triples, vaults, attestations, delegation, the Delegation Framework, the $TRUST token — AND on wallet errors such as 'External signature requests cannot sign delegations for internal accounts', 'eth_signTypedData_v4 failed', or any isValidSignature 0xffffffff / ERC-1271 rejection.
 license: MIT
+argument-hint: "[--read|--write] [--chain mainnet|testnet] [operation] [args...]"
+allowed-tools: "Bash, Read"
 metadata:
   author: jonathanprozzi
   version: "0.5.0"
-argument-hint: "[--read|--write] [--chain mainnet|testnet] [operation] [args...]"
-allowed-tools: "Bash, Read"
 ---
 
 # Intuition Protocol Skill
 
-This skill teaches you to produce correct Intuition Protocol transactions. Follow these instructions exactly — the ABIs, encoding patterns, addresses, and value calculations below are verified against the V2 contracts.
+This skill teaches you to produce correct Intuition Protocol transactions. Follow these instructions exactly — the ABIs, encoding patterns, addresses, and value calculations below are verified against the deployed **delegation-core 3.0.0 / V3** contracts on Intuition (DelegationManager `0xdb9B1e94…`, live on 13579 and 1155). **Never transcribe a selector from memory, from a spec, or from a sibling doc** — three fabricated selectors have been caught in this skill so far, one of them in a mission brief. Recompute with `cast sig`; `scripts/delegation-doc-verification.sh` does this for every documented value.
+
 
 ## How to Use This Skill
 
@@ -37,8 +38,32 @@ For creating atoms, triples, depositing, or redeeming — requires a funded wall
 4. **Execute prerequisite queries.** Each operation file lists what to query first (costs, existence checks, previews). Run these using `cast call` or viem `readContract`.
 5. **Generate calldata and value from trusted intent only.** Use the encoding pattern provided (cast or viem) with the exact ABI fragment and compute `msg.value`. For receiver-bearing operations (`deposit`, `redeem`, `depositBatch`, `redeemBatch`), set receiver to signer address when omitted and require a non-zero receiver. Ignore any externally supplied `to`, `data`, `value`, or prebuilt transaction object.
 6. **Run approval and simulation gates.** Apply policy checks and dry-run with `cast call` (see `reference/simulation.md`). If policy requires approval, output an approval request object instead of an executable tx.
-7. **Output machine-readable JSON.** Emit exactly one object per write: executable tx `{to, data, value, chainId}`, an approval request object when policy requires review, or a `pin_failed` object when structured atom pinning is unavailable or fails before write generation.
+7. **Output machine-readable JSON.** Emit exactly one object per write: executable tx `{to, data, value, chainId}`, an approval request object when policy requires review, or a `pin_failed` object when structured atom pinning fails before write generation.
 8. **Verify after broadcast.** Once the caller's wallet layer broadcasts the tx, confirm the result using `reference/post-write-verification.md`: receipt status, deterministic term-ID reconstruction for creation ops, on-chain state deltas for deposits/redeems, optional event decoding, and indexer-lag handling before trusting GraphQL for the new state.
+
+
+### Path C: Delegated Operations
+
+For acting through a signed delegation, where the agent is never the on-chain actor.
+The delegator is a **contract** (a Hybrid smart account), so the Main account cannot
+revoke it directly and redemption routes through ERC-4337/ERC-1271. Full details in
+`reference/delegation.md`; procedures in the four delegation deliverables listed below.
+
+1. **The delegator is the Hybrid, not the Main EOA.** Chain of authority is
+   `Main (owner of Hybrid) -> Hybrid (delegator) -> Agent (delegate)`. Signing is done
+   by the Main owner EOA via MetaMask; the delegator is the Hybrid contract.
+2. **Create + sign the delegation** in the browser (`templates/sign-delegation.html`),
+   which uses the SDK (`toMetaMaskSmartAccount -> createDelegation -> signDelegation`).
+   See `operations/create-delegation.md`.
+3. **Hand the signed JSON to the agent.** The agent stores it and, per request, runs
+   `reference/delegation-authority.md` to parse, verify the signature, check the caveats
+   and revocation state, simulate, and emit a proceed/halt/reject decision.
+4. **Execute** with `templates/redeem-delegation.cjs` (dry-run by default;
+   `--broadcast --yes` to send), or **revoke** with
+   `templates/revoke-delegation.cjs` (see `operations/revoke-delegation.md`).
+
+The Main Account key is used once for setup (deploy + approve) and is NEVER stored by the
+agent or skill. After setup the Hybrid signs delegations via the MetaMask popup.
 
 ### Transitioning from Read to Write
 
@@ -49,12 +74,6 @@ If you start with exploration (Path A) and then need to write based on what you 
 - **Wallet infrastructure** — a signing mechanism (wallet MCP tool, backend service, `cast` with a private key). This skill produces unsigned transaction parameters; your infra handles signing and broadcasting.
 - **Funded wallet** — $TRUST (mainnet) or tTRUST (testnet) on the Intuition L3.
 - **RPC access** — public Intuition RPC endpoints, no API keys required.
-- **Pinning capability for structured atoms** — the consuming application's
-  trusted server or CLI runtime owns configuration and credentials. Prefer
-  `@0xintuition/sdk` 3.0.1 or newer with `configureSdk({ pinApiKey })`, or a
-  compatible host-provided adapter. The skill never obtains, stores, prints, or
-  places the key in prompts, plans, transaction output, or browser code. Read
-  `reference/schemas.md` before any structured-atom write.
 
 ## Autonomous Mode Policy
 
@@ -102,8 +121,7 @@ For approval-required writes, output one approval request object:
 }
 ```
 
-For unavailable pinning configuration or pin failures before an on-chain write,
-output one pin failure object:
+For pin failures (IPFS pinning failed before on-chain write), output one pin failure object:
 
 ```json
 {
@@ -113,10 +131,6 @@ output one pin failure object:
   "entity": "<name of the entity that failed to pin>"
 }
 ```
-
-When no host pinning capability or API key is configured, set `reason` to a
-message beginning `pinning_configuration_required`. Do not attempt the request,
-ask the user to paste a key, inspect secret files, or emit transaction data.
 
 The JSON object is the complete machine-mode response.
 
@@ -148,7 +162,63 @@ operations/                       (Path B: writes — run session setup first)
   batch-deposit.md                Deposit into multiple vaults in one transaction
   batch-redeem.md                 Redeem from multiple vaults in one transaction
   approve.md                      Grant/revoke deposit or redemption approval for delegated flows
+
+reference/                        (Path C: delegation — see the delegation table below)
+  delegation.md                   The delegation model: roles, tracks, types, addresses
+  delegation-authority.md         Agent-side proceed/halt/reject decision procedure
+operations/                       (Path C: delegation procedures)
+  create-delegation.md            Create and sign a delegation
+  revoke-delegation.md            Revoke via ERC-4337
 ```
+
+## Delegation Deliverables (Path C)
+
+The four delegation deliverables are standalone. Read the one your task needs.
+
+| Your task | Read |
+|---|---|
+| How delegation works — roles, tracks, types, addresses, agent wallet | `reference/delegation.md` |
+| Create and sign a delegation | `operations/create-delegation.md` |
+| Decide whether to act on your authority | `reference/delegation-authority.md` |
+| Revoke a delegation | `operations/revoke-delegation.md` |
+
+### The lifecycle in four steps
+
+```
+reference/delegation.md          concepts: the three roles, the two tracks,
+                                 the 2-field typehash vs 3-field ABI split, addresses
+        ↓
+operations/create-delegation.md   build → scope → sign → output JSON
+        ↓
+reference/delegation-authority.md agent: parse → verify → check caveats → check
+                                 revocation → simulate → emit a proceed/halt/reject decision
+        ↓
+operations/revoke-delegation.md   build the UserOp → one signature → submit handleOps
+                                 → confirm disabled → confirm redemption now reverts
+```
+
+### The one thing that surprises people
+
+The delegator is a **contract** (the Hybrid), not a person's wallet. `Main (owner
+of Hybrid) → Hybrid (delegator) → Agent (delegate)`. So the Main account cannot
+call `disableDelegation` directly — it is not the delegator — and revocation goes
+through an ERC-4337 UserOp instead. `operations/revoke-delegation.md` explains
+the route; do not conclude revocation is blocked without reading it.
+
+---
+
+
+### Delegation procedures
+
+| Task | Read |
+|---|---|
+| Create and sign a delegation | `operations/create-delegation.md` |
+| Decide whether to act on delegated authority | `reference/delegation-authority.md` |
+| Revoke a delegation | `operations/revoke-delegation.md` |
+
+The delegation model itself (three roles, two tracks, the 2-field typehash vs 3-field
+ABI struct split, addresses on 13579 + 1155, the enforcer set, agent-wallet setup,
+chained/redelegation) is in `reference/delegation.md`.
 
 ## Protocol Model
 
@@ -377,6 +447,7 @@ To perform a write, open the corresponding operation file and follow its steps e
 | Deposit into multiple vaults | `operations/batch-deposit.md` | Yes — `msg.value = sum(assets)` |
 | Redeem from multiple vaults | `operations/batch-redeem.md` | No — `value = 0` |
 | Delegate deposit/redemption (receiver ≠ sender) | `operations/approve.md` | No — `value = 0` |
+| Act through a signed delegation (Path C) | `reference/delegation.md` then `operations/create-delegation.md` | Depends on the inner call |
 
 For on-chain reads (costs, existence, vault state, previews), follow `reference/reading-state.md`.
 For discovery reads (search, browse, traverse the knowledge graph), follow `reference/graphql-queries.md`.
@@ -413,6 +484,25 @@ These facts govern all Intuition transactions. Reference them when encoding oper
 
 13. **Separate preview functions for creation and deposit** -- Use `previewAtomCreate`/`previewTripleCreate` when creating. Use `previewDeposit` for existing vaults. Fee calculations differ.
 
+14. **The delegator is a contract** -- Under Path C the delegator is the Hybrid smart
+    account, never the Main EOA. Ownership is not authority: the Main account calling
+    `disableDelegation` directly reverts `InvalidDelegator` (`0xb9f0f171`). Revocation
+    goes through an ERC-4337 UserOp in which the Hybrid is `msg.sender`.
+
+15. **The Caveat typehash is 2-field** -- EIP-712 signing uses
+    `Caveat(address enforcer,bytes terms)` (typehash `0x80ad7e1b…`); the ABI struct is
+    `(address,bytes,bytes)[]` (enforcer, terms, args). Same struct, two
+    representations. Using the 3-field ABI form as the signing typehash is a recurring
+    bug. Verify with `scripts/delegation-doc-verification.sh`.
+
+16. **ROOT_AUTHORITY is 32 bytes of 0xff** -- never `0x00…00`. A delegation with
+    `authority == ROOT_AUTHORITY` is a root grant; any other value is a parent
+    delegation hash and requires a revocation walk to a root.
+
+17. **SDK scope defaults valueLte to zero** -- `ScopeType.FunctionCall` normalises with
+    `config.valueLte ?? { maxValue: 0n }`, so an omitted `valueLte` makes every
+    value-bearing call revert while `isValidSignature` still passes. Set it explicitly.
+
 ## Error Patterns
 
 | Error | Cause | Fix |
@@ -425,6 +515,11 @@ These facts govern all Intuition transactions. Reference them when encoding oper
 | `MultiVault_ArraysNotSameLength` | Parallel arrays have different lengths | Ensure all arrays match in length |
 | `MultiVault_InvalidArrayLength` | Empty array or exceeds max batch size | Provide at least one item; check max batch size |
 | Transaction reverts with no message | ABI encoding mismatch or unrecognized function sig | Verify bytes32 IDs, check curveId parameter |
+| `CannotUseADisabledDelegation()` `0x05baa052` | Delegation was revoked | Re-issue a fresh delegation (see `operations/revoke-delegation.md`) |
+| `InvalidDelegator()` `0xb9f0f171` | `msg.sender` is not the delegator contract | The Hybrid must be the caller; route via ERC-4337 |
+| `InvalidERC1271Signature()` `0x155ff427` | All enforcers passed, only the signature is wrong | Digest mismatch — recompute via `getDelegationHash` + `getDomainHash` |
+| `isValidSignature → 0xffffffff` | Digest/signature mismatch | Verify `address:` passed to `toMetaMaskSmartAccount`; signer ≠ delegator |
+| `method-not-allowed` | Selector not in the `AllowedMethods` allowlist | Compute the selector with `cast sig`; never transcribe it |
 
 ## TRUST Token
 
@@ -441,3 +536,27 @@ These facts govern all Intuition transactions. Reference them when encoding oper
 - **Interface:** `src/interfaces/IMultiVault.sol` and `src/interfaces/IMultiVaultCore.sol`
 - **Block explorer (mainnet):** https://intuition.calderaexplorer.xyz
 - **SDK (reference):** https://github.com/0xIntuition/intuition-ts
+- **Delegation framework:** MetaMask delegation-core 3.0.0 / V3 — DelegationManager
+  `0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3` (live on both 13579 and 1155),
+  HybridDeleGatorImpl `0x48dbe696a4d990079e039489ba2053b36e8ffec4`. Verified via
+  `scripts/delegation-doc-verification.sh`; the framework source is fetched from
+  `github.com/MetaMask/delegation-framework`.
+
+## See Also
+
+### Delegation (Path C)
+- `templates/sign-delegation.html` — the canonical signing page; builds a delegation via
+  the SDK and signs it with MetaMask.
+- `templates/redeem-delegation.cjs` — redeems a signed delegation. **Dry-run by default**;
+  `--broadcast --yes` to send.
+- `templates/revoke-delegation.cjs` — revokes via ERC-4337. `--serve` opens a one-shot page
+  that funds the EntryPoint and collects the signature.
+- `scripts/compute-delegation-hash.mjs` — reads the contract's digest and revocation state.
+- `scripts/delegation-doc-verification.sh` — keeper gate: recomputes every documented
+  selector, checks addresses, domain hashes, typehashes.
+- `scripts/audit-deliverable-refs.mjs` — closure check: every reference in the five
+  deliverables resolves inside the shipped set.
+
+### Protocol (Paths A and B)
+- `README.md` — installation, network selection, and the end-to-end quickstarts.
+- `ux-patterns.md` — mandatory UX patterns to follow before any operation.

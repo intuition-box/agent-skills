@@ -1,0 +1,29 @@
+{
+  "delegate": "0xe9bfdec6fa795a24e3069292248d9d16570e050d",
+  "delegator": "0x433d9b2a6993f0cf36d9cce96d5cfe269d69ec14",
+  "authority": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "caveats": [
+    {
+      "enforcer": "0x7f20f61b1f09b08d970938f6fa563634d65c4eeb",
+      "terms": "0x2ece8d4dedcb9918a398528f3fa4688b1d2cab91",
+      "args": "0x"
+    },
+    {
+      "enforcer": "0x92bf12322527caa612fd31a0e810472bbb106a8f",
+      "terms": "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "args": "0x"
+    },
+    {
+      "enforcer": "0x1046bb45c8d673d4ea75321280db34899413c069",
+      "terms": "0x0000000000000000000000000000000000000000000000000000000077359400",
+      "args": "0x"
+    },
+    {
+      "enforcer": "0x04658b29f6b82ed55274221a06fc97d318e25416",
+      "terms": "0x0000000000000000000000000000000000000000000000000000000000000100",
+      "args": "0x"
+    }
+  ],
+  "salt": "0x0ca17e0e0af5d096241cb196de2d8802044b3e8082cc64f06015e73907c8a49c",
+  "signature": "0xa3eeee30e2bef557029464a55ac74a8864745882e021072124b87798debae2c229230bd733870e05bf0ec5a4d17d86c489363905ac9b8b632041acacfc82b7a51b"
+}

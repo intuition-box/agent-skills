@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Intuition Delegation Setup &amp; Sign</title>
+  <style>
+    /* ---- Phase 1: tokens. Every pair below was measured for WCAG AA (>=4.5:1).
+       Replacements: accent #e94560->#c83250 (3.83->5.21 on #fff),
+       error #f44336->#ff5c4d (4.32->5.21 on card),
+       muted #8b9bb4->#94a4bd (4.43->4.94 on the input surface). ---- */
+    :root {
+      /* Brand palette. Glows sit on the body as radial-gradients over --bg;
+         cards are translucent so the glows read THROUGH them. */
+      --bg:#0A0B0E;              /* deep central background (black)        */
+      --glow-tl:#0E4356;         /* teal/cyan  upper-left glow              */
+      --glow-br:#3E1818;         /* dark reddish-brown lower-right glow     */
+      --marble:#131315;          /* textured marble behind text boxes       */
+      --accent:#00E5C8;          /* bright teal/cyan button + right bloom    */
+      --on-accent:#0A0B0E;       /* DARK text on cyan: #fff on cyan is 1.61:1 */
+      --text:#e0e0e0; --muted:#b0bac9;  /* lifted: 4.86:1 over the teal glow corner */
+      --border:#5b6573;          /* lifted: >=3:1 on BOTH marble (3.14) and black (3.33) */
+      --success:#4caf50; --error:#ff5c4d; --warn:#ffb300; --focus:#5eead4;
+      --card:rgba(255,255,255,.04);
+      --tap:44px;
+    }
+    * { box-sizing:border-box; }
+    body { font-family: ui-monospace, monospace; color:var(--text);
+           padding:20px; max-width:900px; margin:auto; line-height:1.5;
+           background:
+             radial-gradient(1100px 620px at 0% 0%,  var(--glow-tl) 0%, transparent 62%),
+             radial-gradient(950px 620px at 100% 100%, var(--glow-br) 0%, transparent 62%),
+             var(--bg);
+           background-attachment:fixed; }
+    .card { background:var(--card); border:1px solid var(--border); padding:16px;
+            margin-bottom:16px; border-radius:8px; }
+    /* Header: explicit weight + letter-spacing so the h1 reads as a title, not body text. */
+    h1 { font-size:1.75em; font-weight:800; letter-spacing:-.02em; color:#fff;
+         margin:0 0 16px; line-height:1.2; }
+    h2 { font-size:1.05em; margin:0 0 10px; border-bottom:1px solid var(--border); padding-bottom:6px; }
+    h3 { font-size:.95em; margin:14px 0 6px; color:var(--muted); }
+    textarea { width:100%; height:110px; background:var(--marble); color:var(--text);
+               border:1px solid var(--border); font-family:inherit; padding:8px;
+               border-radius:6px; font-size:1em; }
+    input[type=file] { font-family:inherit; font-size:.9em; color:var(--text);
+                       background:var(--marble); border:1px solid var(--border);
+                       border-radius:6px; padding:8px; width:100%; }
+    /* min-height var(--tap) = 44px target; focus ring measured >=7.5:1 on every surface. */
+    button { background:var(--accent); color:var(--on-accent); border:1px solid transparent;
+             padding:10px 16px; min-height:var(--tap); cursor:pointer; font-family:inherit;
+             font-size:1em; margin:0 8px 8px 0; border-radius:6px; transition:filter .15s ease; }
+    button:hover:not(:disabled) { filter:brightness(1.12); }
+    button:disabled { background:#2f343d; color:#9aa4b8; cursor:not-allowed; }
+    button.ghost { background:var(--marble); color:var(--text); border:1px solid var(--border); }
+    button.ghost:hover:not(:disabled) { border-color:var(--accent); }
+    :focus-visible { outline:3px solid var(--focus); outline-offset:2px; border-radius:6px; }
+    textarea:focus-visible, input:focus-visible { border-color:var(--focus); }
+    .status { margin-top:6px; font-size:.9em; overflow-wrap:anywhere; }
+    .static-info { color:var(--muted); }
+    .success { color:var(--success); } .error { color:var(--error); } .warn { color:var(--warn); }
+    .muted { color:var(--muted); font-size:.82em; }
+    pre { white-space:pre-wrap; word-break:break-all; background:var(--marble); color:var(--text);
+          padding:10px; border-radius:6px; margin:6px 0; font-size:.85em; }
+    .note { background:var(--marble); border-left:4px solid var(--accent); padding:10px;
+            margin:10px 0; border-radius:0 6px 6px 0; }
+    code { background:var(--marble); color:var(--text); padding:1px 4px; border-radius:3px; }
+    .grid { display:grid; grid-template-columns:auto 1fr; gap:6px 12px; font-size:.85em; margin:8px 0; }
+    /* grid values hold 42-char addresses and 66-char digests -> must wrap, not overflow. */
+    .grid b { color:var(--muted); font-weight:normal; }
+    .grid span { overflow-wrap:anywhere; min-width:0; }
+    .step { display:inline-block; background:var(--accent); color:var(--on-accent); border-radius:50%;
+            width:22px; height:22px; line-height:22px; text-align:center; font-size:.75em;
+            margin-right:8px; vertical-align:1px; }
+    #fatalBox { background:#7f1d1d; color:#fff; padding:12px; margin:12px 0;
+                white-space:pre-wrap; word-break:break-all; border-radius:6px; display:none; }
+    /* Phase 2: single-column collapse + reduced motion. Phase 1 also adds the
+       prefers-reduced-motion guard that had zero coverage before. */
+    @media (max-width:640px) {
+      body { padding:12px; }
+      .card { padding:12px; }
+      .grid { grid-template-columns:1fr; gap:2px; }
+      .grid b { margin-top:6px; }
+      textarea { height:170px; }
+      button { display:block; width:100%; margin:0 0 8px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      * { transition:none !important; animation:none !important; }
+    }
+  </style>
+</head>
+<body>
+<pre id="fatalBox"></pre>
+<h1>Intuition — Delegation Setup</h1>
+
+<div class="note">
+  <b>Roles:</b> the <code>delegator</code> is the <b>Hybrid smart account</b>; the key that signs
+  must be the Hybrid's <b>owner EOA</b>. Two different addresses — MetaMask refuses with
+  &ldquo;cannot sign delegations for internal accounts&rdquo; if they are the same.
+</div>
+
+<div class="card">
+  <h2><span class="step">1</span>Delegation</h2>
+  <label for="fileInput">Delegation JSON file</label><br>
+  <input type="file" id="fileInput" accept=".json" aria-describedby="fileHint"><br>
+  <span id="fileHint" class="muted">Pick a signed or unsigned delegation JSON.</span><br><br>
+  <textarea id="delegationInput" placeholder="Paste a delegation JSON here, or use the file picker"></textarea>
+  <div class="status" id="loadStatus" role="status" aria-live="polite"></div>
+  <!-- Connect lives at the top of the flow (moved up from step 3) so the wallet
+       is authorised before any SDK call. connectStatus gives feedback HERE, at the
+       click, instead of only in signStatus further down the page. -->
+  <button onclick="connectWallet()">Connect Wallet</button>
+  <div class="status" id="connectStatus" role="status" aria-live="polite"></div>
+  <button onclick="loadFromTextarea()">Load from Textarea</button>
+  <button class="ghost" onclick="buildFresh()">Build fresh (SDK)</button>
+  <h3>Roles</h3>
+  <div class="grid">
+    <b>Hybrid (delegator)</b><span id="hybridDisplay">0x433d9b2a6993f0cf36d9cce96d5cfe269d69ec14</span>
+    <b>Owner EOA (signer)</b><span>0x61A20dE84D7E5C422Af323D47497ED3bf43Fa5ee</span>
+    <b>Agent (delegate)</b><span id="agentDisplay">0xe9BfdEC6Fa795a24e3069292248d9d16570E050d</span>
+    <b>MultiVault</b><span>0x2Ece8D4dEdcB9918A398528f3fa4688b1d2CAB91</span>
+  </div>
+  <div class="status" id="caveatStatus" role="status" aria-live="polite"></div>
+  <button class="ghost" onclick="checkCaveats()">Check caveats</button>
+</div>
+
+<div class="card">
+  <h2><span class="step">2</span>Hybrid setup</h2>
+  <div class="grid">
+    <b>2a Deploy</b><span>ERC-1967 proxy &rarr; shared HybridDeleGator impl <span class="muted">(CREATE2 via SimpleFactory, no bundler)</span></span>
+    <b>2b Approve</b><span>MultiVault <code>approve(hybrid, 3)</code> = DEPOSIT | REDEMPTION <span class="muted">(selector 0x4342e966 — NOT the ERC-20 approve)</span></span>
+    <b>2c Fund</b><span>send tTRUST to the Hybrid so it can pay atom/triple costs and fund deposits</span>
+  </div>
+  <div class="status static-info">Hybrid address: <span id="predictedAddress">…</span></div>
+  <button onclick="deployHybrid()">2a. Deploy Hybrid</button>
+  <button onclick="approveHybrid()">2b. Approve on MultiVault</button>
+  <button onclick="fundHybrid()">2c. Fund Hybrid</button>
+  <div class="status" id="setupStatus" role="status" aria-live="polite"></div>
+</div>
+
+<div class="card">
+  <h2><span class="step">3</span>Sign the delegation</h2>
+  <div class="status" id="signStatus" role="status" aria-live="polite"></div>
+  <div class="grid">
+    <b>Chain</b><span id="chainLine">…</span>
+    <b>Digest</b><span id="digestLine" class="muted">not computed</span>
+  </div>
+  <button onclick="computeDigest()">Compute Digest</button>
+  <button onclick="signDelegation()">Sign with MetaMask (SDK)</button>
+</div>
+
+<div class="card">
+  <h2><span class="step">4</span>Signed delegation &mdash; JSON output</h2>
+  <div class="status" id="verifyStatus" role="status" aria-live="polite"></div>
+  <pre id="signedResult">(nothing signed yet)</pre>
+  <button onclick="copyResult()">Copy JSON</button>
+  <button class="ghost" onclick="downloadResult()">Download .json</button>
+</div>
+
+<script>
+window.__pageErrors = [];
+function showFatal(t, d) {
+  window.__pageErrors.push(t + ': ' + d);
+  const b = document.getElementById('fatalBox');
+  b.style.display = 'block';
+  b.textContent = '⚠ ' + window.__pageErrors.join('\n⚠ ');
+}
+window.addEventListener('error', e => showFatal('script error', (e.message || '') + ' line ' + e.lineno));
+window.addEventListener('unhandledrejection', e => showFatal('rejection', (e.reason && (e.reason.shortMessage || e.reason.message)) || String(e.reason)));
+
+// ============================== constants ==============================
+const DM         = "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
+const CHAIN_ID   = 13579;
+const CHAIN_NAME = "Intuition Testnet";
+const FACTORY    = "0x54c68ad35b082546a1e2e3e1a7542Ce9d3A2e756";
+const HYBRID_IMPL= "0x48dbe696a4d990079e039489ba2053b36e8ffec4";
+const DEPLOY_SALT= "0x0000000000000000000000000000000000000000000000000000000000000000";
+const HYBRID     = "0x433d9b2a6993f0cf36d9cce96d5cfe269d69ec14";
+const OWNER_EOA  = "0x61A20dE84D7E5C422Af323D47497ED3bf43Fa5ee";
+const AGENT      = "0xe9BfdEC6Fa795a24e3069292248d9d16570E050d";
+const MULTIVAULT = "0x2Ece8D4dEdcB9918A398528f3fa4688b1d2CAB91";
+const MAGIC      = "0x1626ba7e";
+const HEX_PREFIX = String.fromCharCode(48, 120);   // the two chars 0x
+const ROOT_AUTHORITY = HEX_PREFIX + 'f'.repeat(64);   // all-ones root authority
+const UINT256_MAX = 57896044618658097711785492504343953926634992332820282019728792003956564819967n;
+const APPROVE_DEPOSIT_REDEMPTION = 3;      // DEPOSIT | REDEMPTION
+
+// ERC1967Proxy creation bytecode (~2.0KB — MetaMask-safe). Deploying the full
+// HybridDeleGator instead fails: its bytecode is 44KB (over MetaMask's ~43KB limit)
+// and contains an unresolved SCL_RIP7212 library placeholder.
+const PROXY_BYTECODE = "0x60806040526040516103f03803806103f08339810160408190526100229161025e565b61002c8282610033565b5050610341565b61003c82610091565b6040516001600160a01b038316907fbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b905f90a280511561008557610080828261010c565b505050565b61008d61017f565b5050565b806001600160a01b03163b5f036100cb57604051634c9c8ce360e01b81526001600160a01b03821660048201526024015b60405180910390fd5b7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc80546001600160a01b0319166001600160a01b0392909216919091179055565b60605f80846001600160a01b0316846040516101289190610326565b5f60405180830381855af49150503d805f8114610160576040519150601f19603f3d011682016040523d82523d5f602084013e610165565b606091505b5090925090506101768583836101a0565b95945050505050565b341561019e5760405163b398979f60e01b815260040160405180910390fd5b565b6060826101b5576101b0826101ff565b6101f8565b81511580156101cc57506001600160a01b0384163b155b156101f557604051639996b31560e01b81526001600160a01b03851660048201526024016100c2565b50805b9392505050565b80511561020f5780518082602001fd5b604051630a12f52160e11b815260040160405180910390fd5b634e487b7160e01b5f52604160045260245ffd5b5f5b8381101561025657818101518382015260200161023e565b50505f910152565b5f806040838503121561026f575f80fd5b82516001600160a01b0381168114610285575f80fd5b60208401519092506001600160401b03808211156102a1575f80fd5b818501915085601f8301126102b4575f80fd5b8151818111156102c6576102c6610228565b604051601f8201601f19908116603f011681019083821181831017156102ee576102ee610228565b81604052828152886020848701011115610306575f80fd5b61031783602083016020880161023c565b80955050505050509250929050565b5f825161033781846020870161023c565b9190910192915050565b60a38061034d5f395ff3fe6080604052600a600c565b005b60186014601a565b6050565b565b5f604b7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc546001600160a01b031690565b905090565b365f80375f80365f845af43d5f803e8080156069573d5ff35b3d5ffdfea2646970667358221220fd2cc92935c943d341edacaf5318a0b9ab0185ce62ef72e95ab393ef358730c464736f6c63430008170033";
+
+// Operations the agent may perform. These become the AllowedMethods allowlist:
+// anything NOT listed is refused at redeem with AllowedMethodsEnforcer:method-not-allowed,
+// while isValidSignature still passes. Selectors verified with `cast sig`.
+const OPS = {
+  'deposit':       { sig: 'deposit(address,bytes32,uint256,uint256)',              value: 0n,
+                    note: 'deposit tTRUST into a triple\'s vault' },
+  'redeem':        { sig: 'redeem(address,bytes32,uint256,uint256,uint256)',       value: 0n,
+                    note: 'WITHDRAW — burn shares, receive tTRUST back' },
+  'createAtoms':   { sig: 'createAtoms(bytes[],uint256[])',                        value: 1000000001000000n,
+                    note: 'create atoms (Hybrid pays the atom cost)' },
+  'createTriples': { sig: 'createTriples(bytes32[],bytes32[],bytes32[],uint256[])', value: 1000000002000000n,
+                    note: 'create a triple from three atom IDs' }
+};
+let ENABLED_OPS = ['deposit', 'redeem', 'createAtoms', 'createTriples'];
+
+const KIT_URL   = 'https://cdn.jsdelivr.net/npm/@metamask/smart-accounts-kit@2.0.0/+esm';
+const UTILS_URL = 'https://cdn.jsdelivr.net/npm/@metamask/smart-accounts-kit@2.0.0/utils/+esm';
+const VIEM_URL  = 'https://cdn.jsdelivr.net/npm/viem@2.55.13/+esm';
+const CORE_URL  = 'https://cdn.jsdelivr.net/npm/@metamask/delegation-core@3.0.0/+esm';
+
+const chain = { id: CHAIN_ID, name: CHAIN_NAME,
+  nativeCurrency: { name: 'TRUST', symbol: 'TRUST', decimals: 18 },
+  rpcUrls: { default: { http: ['https://testnet.rpc.intuition.systems/http'] } } };
+
+let parsed = null, sdk = null, digest = null;
+const SIG_OF = {};
+function sigOf(sig) { const v = SIG_OF[sig]; return v ? v.replace(/^0x/, '') : undefined; }
+const $ = id => document.getElementById(id);
+function setStatus(id, msg, cls) { $(id).innerHTML = '<span class="' + cls + '">' + msg + '</span>'; }
+
+// ============================== SDK ==============================
+// Dynamic import() in a CLASSIC script on purpose: a <script type="module"> would put
+// every function in module scope where these inline onclick= handlers cannot see it
+// (ReferenceError, dead buttons, no visible error on a phone).
+async function loadSdk() {
+  if (sdk) return sdk;
+  setStatus('loadStatus', 'Loading @metamask/smart-accounts-kit…', 'warn');
+  const [kit, utils, viem, core] = await Promise.all([
+    import(KIT_URL), import(UTILS_URL), import(VIEM_URL), import(CORE_URL)]);
+  sdk = { Implementation: kit.Implementation, toMetaMaskSmartAccount: kit.toMetaMaskSmartAccount,
+    createDelegation: kit.createDelegation, ScopeType: kit.ScopeType,
+    getSmartAccountsEnvironment: kit.getSmartAccountsEnvironment,
+    createCaveatBuilder: utils.createCaveatBuilder, encodeDelegations: core.encodeDelegations,
+    createWalletClient: viem.createWalletClient, createPublicClient: viem.createPublicClient,
+    custom: viem.custom, http: viem.http, keccak256: viem.keccak256, concatHex: viem.concatHex,
+    encodeFunctionData: viem.encodeFunctionData, encodePacked: viem.encodePacked,
+    encodeAbiParameters: viem.encodeAbiParameters, parseAbiParameters: viem.parseAbiParameters,
+    toFunctionSelector: viem.toFunctionSelector, pad: viem.pad, getAddress: viem.getAddress,
+    keccak256_: viem.keccak256 };
+  for (const [k, v] of Object.entries(sdk)) if (v === undefined) throw new Error('CDN import ' + k + ' undefined');
+  for (const o of Object.values(OPS)) SIG_OF[o.sig] = sdk.toFunctionSelector(o.sig);
+  setStatus('loadStatus', 'SDK ready.', 'success');
+  return sdk;
+}
+function pubClient(s) { return s.createPublicClient({ chain, transport: s.custom(window.ethereum) }); }
+
+// ============================== 1. delegation ==============================
+$('fileInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { loadText(await f.text(), 'Loaded from file: ' + f.name); }
+  catch (err) { setStatus('loadStatus', 'Invalid JSON: ' + err.message, 'error'); }
+});
+function getDelegation() {
+  if (!parsed) return null;
+  return (parsed.delegation && typeof parsed.delegation === 'object') ? parsed.delegation : parsed;
+}
+function loadText(text, msg) {
+  parsed = JSON.parse(text);
+  const d = getDelegation();
+  $('delegationInput').value = JSON.stringify(parsed, null, 2);
+  $('hybridDisplay').textContent = d.delegator;
+  $('agentDisplay').textContent = d.delegate;
+  digest = null; $('digestLine').textContent = 'not computed';
+  setStatus('loadStatus', msg, 'success');
+  setStatus('caveatStatus', '');
+  checkCaveats();
+}
+function loadFromTextarea() {
+  try { loadText($('delegationInput').value, 'Loaded from textarea.'); }
+  catch (e) { setStatus('loadStatus', 'Invalid JSON: ' + e.message, 'error'); }
+}
+async function buildFresh() {
+  try {
+    const s = await loadSdk();
+    const env = s.getSmartAccountsEnvironment(CHAIN_ID);
+    const cb = s.createCaveatBuilder(env);
+    cb.addCaveat('limitedCalls', { limit: 100 });
+    const d = s.createDelegation({
+      to: AGENT, from: HYBRID, environment: env,
+      salt: '0x' + (BigInt(Date.now()) * 1000n).toString(16).padStart(64, '0'),
+      scope: { type: s.ScopeType.FunctionCall, targets: [MULTIVAULT],
+               selectors: ENABLED_OPS.map(k => OPS[k].sig),
+               valueLte: { maxValue: UINT256_MAX } },   // scope default is 0 — must be set HERE
+      caveats: cb
+    });
+    loadText(JSON.stringify({ network: 'testnet', chainId: CHAIN_ID, delegation: d }, null, 2),
+             'Built a fresh testnet delegation with the SDK.');
+  } catch (e) { setStatus('loadStatus', 'Build failed: ' + (e.shortMessage || e.message), 'error'); showFatal('buildFresh', e.message); }
+}
+async function checkCaveats() {
+  try { await loadSdk(); } catch (e) {}
+  const d = getDelegation();
+  if (!d) return setStatus('caveatStatus', 'Load a delegation first.', 'error');
+  const problems = [], NAMES = {
+    '0x7f20f61b1f09b08d970938f6fa563634d65c4eeb': 'AllowedTargets',
+    '0x2c21fd0cb9dc8445cb3fb0dc5e7bb0aca01842b5': 'AllowedMethods',
+    '0x92bf12322527caa612fd31a0e810472bbb106a8f': 'ValueLte',
+    '0x1046bb45c8d673d4ea75321280db34899413c069': 'Timestamp',
+    '0x04658b29f6b82ed55274221a06fc97d318e25416': 'LimitedCalls' };
+  const seen = new Set();
+  for (const c of (d.caveats || [])) {
+    const k = (c.enforcer || '').toLowerCase(), n = NAMES[k];
+    if (seen.has(k)) problems.push('duplicate caveat: ' + (n || c.enforcer));
+    seen.add(k);
+    let v = null; try { v = BigInt(c.terms); } catch (_) {}
+    if (n === 'ValueLte' && v === 0n) problems.push('ValueLte is 0 — forbids any value; payable calls revert. Set valueLte inside the scope.');
+    if (n === 'AllowedMethods') {
+      const t = (c.terms || '0x').replace(/^0x/, '').replace(/(0{8})+$/, '');
+      for (let i = 0; i + 8 <= t.length; i += 8) {
+        const sel = t.slice(i, i + 8);
+        if (!Object.values(OPS).some(o => sigOf(o.sig) === sel))
+          problems.push('AllowedMethods has ' + sel + ', not a known selector — valid but unredeemable.');
+      }
+    }
+  }
+  if (d.authority && '0x' + d.authority.toLowerCase().replace(/^0x/, '') !== ROOT_AUTHORITY)
+    problems.push('authority is ' + d.authority + ', expected ROOT_AUTHORITY 0x' + 'f'.repeat(64) + '.');
+  const am = (d.caveats || []).find(c => (c.enforcer || '').toLowerCase() === '0x2c21fd0cb9dc8445cb3fb0dc5e7bb0aca01842b5');
+  let permits = 'no AllowedMethods caveat — unrestricted';
+  if (am) { const t = (am.terms || '0x').replace(/^0x/, '').replace(/(0{8})+$/, '');
+    const sels = []; for (let i = 0; i + 8 <= t.length; i += 8) sels.push(t.slice(i, i + 8));
+    permits = 'PERMITS: ' + sels.map(x => (Object.entries(OPS).find(([, o]) => sigOf(o.sig) === x) || [x])[0]).join(', '); }
+  setStatus('caveatStatus', problems.length
+    ? 'PROBLEMS:<br>' + problems.map(p => '• ' + p).join('<br>') + '<br>' + permits
+    : 'Caveats sane. ' + permits, problems.length ? 'error' : 'success');
+}
+
+// ============================== 2. Hybrid setup ==============================
+// creationCode = ERC1967Proxy bytecode + abi.encode(implementation, initData)
+// initData     = initialize(owner, [], [], [])   selector 0x8ebf9533
+// Predict with computeAddress(initCodeHash, salt) — HASH FIRST.
+function creationCode(s) {
+  const initData = s.encodeFunctionData({
+    abi: [{ type: 'function', name: 'initialize', stateMutability: 'nonpayable',
+      inputs: [{ type: 'address' }, { type: 'string[]' }, { type: 'uint256[]' }, { type: 'uint256[]' }], outputs: [] }],
+    functionName: 'initialize', args: [OWNER_EOA, [], [], []] });
+  const args = s.encodeAbiParameters(
+    [{ type: 'address' }, { type: 'bytes' }], [HYBRID_IMPL, initData]);
+  return PROXY_BYTECODE + args.slice(2);
+}
+async function predictHybrid() {
+  const s = await loadSdk();
+  const cc = creationCode(s);
+  const hash = s.keccak256(cc);
+  const addr = await pubClient(s).readContract({
+    address: FACTORY,
+    abi: [{ type: 'function', name: 'computeAddress', stateMutability: 'view',
+            inputs: [{ type: 'bytes32' }, { type: 'bytes32' }], outputs: [{ type: 'address' }] }],
+    args: [hash, DEPLOY_SALT] });
+  return { predicted: addr, creationCode: cc, initCodeHash: hash };
+}
+async function deployHybrid() {
+  setStatus('setupStatus', 'Computing the CREATE2 address…', 'warn');
+  try {
+    const s = await loadSdk();
+    const { predicted, creationCode: cc } = await predictHybrid();
+    $('predictedAddress').textContent = predicted + '  (from creationCode)';
+    const pub = pubClient(s);
+    const code = await pub.getCode({ address: predicted });
+    if (code && code !== '0x') {
+      $('hybridDisplay').textContent = predicted;
+      return setStatus('setupStatus', 'Already deployed — nothing to do. ' + predicted, 'success');
+    }
+    const wc = s.createWalletClient({ account: OWNER_EOA, chain, transport: s.custom(window.ethereum) });
+    const data = s.encodeFunctionData({
+      abi: [{ type: 'function', name: 'deploy', stateMutability: 'nonpayable',
+              inputs: [{ type: 'bytes' }, { type: 'bytes32' }], outputs: [{ type: 'address' }] }],
+      functionName: 'deploy', args: [cc, DEPLOY_SALT] });
+    setStatus('setupStatus', 'Approve the MetaMask popup to deploy…', 'warn');
+    const h = await wc.sendTransaction({ to: FACTORY, data, chain, account: OWNER_EOA });
+    const r = await pub.waitForTransactionReceipt({ hash: h });
+    if (r.status !== 'success') return setStatus('setupStatus', 'Deploy FAILED', 'error');
+    $('hybridDisplay').textContent = predicted;
+    setStatus('setupStatus', 'Deployed ' + predicted + ' (block ' + parseInt(r.blockNumber, 16) + ')', 'success');
+  } catch (e) { setStatus('setupStatus', 'Deploy failed: ' + (e.shortMessage || e.message), 'error'); showFatal('deploy', e.message); }
+}
+async function approveHybrid() {
+  try {
+    const s = await loadSdk();
+    const wc = s.createWalletClient({ account: OWNER_EOA, chain, transport: s.custom(window.ethereum) });
+    // approve(address,uint8) = 0x4342e966. The ERC-20 approve(address,uint256)
+    // (0x095ea7b3) reverts here and would leave the approval silently unset.
+    const data = s.encodeFunctionData({
+      abi: [{ type: 'function', name: 'approve', stateMutability: 'nonpayable',
+              inputs: [{ type: 'address' }, { type: 'uint8' }], outputs: [] }],
+      functionName: 'approve', args: [HYBRID, APPROVE_DEPOSIT_REDEMPTION] });
+    setStatus('setupStatus', 'Approve popup…', 'warn');
+    const h = await wc.sendTransaction({ to: MULTIVAULT, data, chain, account: OWNER_EOA });
+    const r = await pubClient(s).waitForTransactionReceipt({ hash: h });
+    setStatus('setupStatus', r.status === 'success'
+      ? 'MultiVault: ' + HYBRID + ' approved for DEPOSIT | REDEMPTION (type 3)' : 'Approve FAILED', r.status === 'success' ? 'success' : 'error');
+  } catch (e) { setStatus('setupStatus', 'Approve failed: ' + (e.shortMessage || e.message), 'error'); showFatal('approve', e.message); }
+}
+async function fundHybrid() {
+  const amt = prompt('Send how much tTRUST to the Hybrid?', '0.01');
+  if (!amt) return;
+  try {
+    const s = await loadSdk();
+    const wc = s.createWalletClient({ account: OWNER_EOA, chain, transport: s.custom(window.ethereum) });
+    setStatus('setupStatus', 'Send popup…', 'warn');
+    const h = await wc.sendTransaction({ to: HYBRID, value: BigInt(amt) * 10n ** 18n, chain, account: OWNER_EOA });
+    const r = await pubClient(s).waitForTransactionReceipt({ hash: h });
+    setStatus('setupStatus', r.status === 'success' ? 'Funded ' + amt + ' tTRUST' : 'Fund FAILED', r.status === 'success' ? 'success' : 'error');
+  } catch (e) { setStatus('setupStatus', 'Fund failed: ' + (e.shortMessage || e.message), 'error'); }
+}
+
+// ============================== 3. sign ==============================
+async function connectWallet() {
+  // The button now sits at the top of the page (above Load from Textarea), so its
+  // feedback must appear there too. signStatus is still written as before so step 3
+  // keeps showing connection state — this only ADDS a mirror, it does not replace.
+  const say = (msg, cls) => { setStatus('signStatus', msg, cls); setStatus('connectStatus', msg, cls); };
+  if (!window.ethereum) return say('No injected wallet.', 'error');
+  try {
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const a = await window.ethereum.request({ method: 'eth_accounts' });
+    const cid = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
+    $('chainLine').textContent = a[0] + ' on ' + cid + (cid === CHAIN_ID ? ' ✓' : ' ✗ WRONG — switch to ' + CHAIN_NAME);
+    say('Connected: ' + a[0], cid === CHAIN_ID ? 'success' : 'error');
+  } catch (e) { say(e.message, 'error'); }
+}
+const DTUPLE = [{ type: 'tuple', components: [
+  { type: 'address', name: 'delegate' }, { type: 'address', name: 'delegator' }, { type: 'bytes32', name: 'authority' },
+  { type: 'tuple[]', name: 'caveats', components: [ { type: 'address', name: 'enforcer' }, { type: 'bytes', name: 'terms' }, { type: 'bytes', name: 'args' } ] },
+  { type: 'uint256', name: 'salt' }, { type: 'bytes', name: 'signature' } ] }];
+async function contractDigest(s, pub, d) {
+  const [sh, dh] = await Promise.all([
+    pub.readContract({ address: DM, abi: [{ type: 'function', name: 'getDelegationHash', stateMutability: 'pure', inputs: DTUPLE, outputs: [{ type: 'bytes32' }] }],
+      args: [{ delegate: d.delegate, delegator: d.delegator, authority: d.authority,
+               caveats: (d.caveats || []).map(c => ({ enforcer: c.enforcer, terms: c.terms, args: c.args ?? '0x' })),
+               salt: BigInt(d.salt), signature: '0x' }] }),
+    pub.readContract({ address: DM, abi: [{ type: 'function', name: 'getDomainHash', stateMutability: 'view', inputs: [], outputs: [{ type: 'bytes32' }] }] })]);
+  return s.keccak256(s.concatHex(['0x1901', dh, sh]));
+}
+async function computeDigest() {
+  const d = getDelegation();
+  if (!d) return setStatus('signStatus', 'Load a delegation first.', 'error');
+  try {
+    const s = await loadSdk();
+    digest = await contractDigest(s, pubClient(s), d);
+    $('digestLine').textContent = digest;
+    setStatus('signStatus', 'Digest computed from the contract.', 'success');
+  } catch (e) { setStatus('signStatus', 'Digest failed: ' + (e.shortMessage || e.message), 'error'); }
+}
+async function signDelegation() {
+  const d = getDelegation();
+  if (!d) return setStatus('signStatus', 'Load a delegation first.', 'error');
+  if (!window.ethereum) return setStatus('signStatus', 'No injected wallet.', 'error');
+  const cid = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
+  if (cid !== CHAIN_ID) return setStatus('signStatus', 'Wrong network: chainId ' + cid + ', need ' + CHAIN_ID + '.', 'error');
+  const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+  const me = accounts[0].toLowerCase();
+  if (me === d.delegator.toLowerCase())
+    return setStatus('signStatus', 'Connected account IS the delegator — it cannot sign. Switch to the owner EOA ' + OWNER_EOA + '.', 'error');
+  if (me !== OWNER_EOA.toLowerCase())
+    return setStatus('signStatus', 'Connected ' + accounts[0] + ' is not the Hybrid owner. Expected ' + OWNER_EOA + '.', 'error');
+  try {
+    const s = await loadSdk();
+    const wc = s.createWalletClient({ account: accounts[0], chain, transport: s.custom(window.ethereum) });
+    const pub = pubClient(s);
+    const sa = await s.toMetaMaskSmartAccount({ client: pub, implementation: s.Implementation.Hybrid,
+      address: d.delegator, signer: { walletClient: wc } });     // address: is mandatory
+    if (sa.address.toLowerCase() !== d.delegator.toLowerCase()) throw new Error('SDK returned a different delegator: ' + sa.address);
+    setStatus('signStatus', 'Approve the MetaMask popup…', 'warn');
+    const signature = await sa.signDelegation({ delegation: d });
+    const signed = Object.assign({}, d, { signature });
+    $('signedResult').textContent = JSON.stringify(signed, null, 2);
+    await verifyOnChain(s, pub, signed);
+  } catch (e) {
+    const m = (e && (e.shortMessage || e.message)) || String(e);
+    setStatus('signStatus', 'Signing failed: ' + m, 'error'); showFatal('sign', m);
+  }
+}
+function encodePermissionContext(s, d) { return s.encodeDelegations([d]); }
+async function verifyOnChain(s, pub, signed) {
+  const out = [];
+  try {
+    const dg = await contractDigest(s, pub, signed);
+    digest = dg; $('digestLine').textContent = dg;
+    const magic = await pub.readContract({ address: signed.delegator,
+      abi: [{ type: 'function', name: 'isValidSignature', stateMutability: 'view', inputs: [{ type: 'bytes32' }, { type: 'bytes' }], outputs: [{ type: 'bytes4' }] }],
+      args: [dg, signed.signature] });
+    out.push((magic.toLowerCase() === MAGIC ? '✔ SIGNATURE VALID' : '✘ SIGNATURE REJECTED') + ' — ' + magic);
+  } catch (e) { out.push('✘ signature check failed: ' + (e.shortMessage || e.message)); }
+  // simulate every enabled op — a valid signature does NOT mean redeemable
+  const pc = encodePermissionContext(s, signed);
+  for (const op of ENABLED_OPS) {
+    let inner;
+    try {
+      if (op === 'deposit') inner = s.encodeFunctionData({ abi: [{ type: 'function', name: 'deposit', stateMutability: 'payable', inputs: [{ type: 'address' }, { type: 'bytes32' }, { type: 'uint256' }, { type: 'uint256' }], outputs: [{ type: 'uint256' }] }], functionName: 'deposit', args: [OWNER_EOA, '0x' + '0'.repeat(64), 1n, 0n] });
+      else if (op === 'redeem') inner = s.encodeFunctionData({ abi: [{ type: 'function', name: 'redeem', stateMutability: 'payable', inputs: [{ type: 'address' }, { type: 'bytes32' }, { type: 'uint256' }, { type: 'uint256' }, { type: 'uint256' }], outputs: [{ type: 'uint256' }] }], functionName: 'redeem', args: [OWNER_EOA, '0x' + '0'.repeat(64), 1n, 1n, 0n] });
+      else if (op === 'createAtoms') inner = s.encodeFunctionData({ abi: [{ type: 'function', name: 'createAtoms', stateMutability: 'payable', inputs: [{ type: 'bytes[]' }, { type: 'uint256[]' }], outputs: [{ type: 'uint256' }] }], functionName: 'createAtoms', args: [['0x61' + '62'.repeat(31)], [OPS[op].value]] });
+      else inner = s.encodeFunctionData({ abi: [{ type: 'function', name: 'createTriples', stateMutability: 'payable', inputs: [{ type: 'bytes32[]' }, { type: 'bytes32[]' }, { type: 'bytes32[]' }, { type: 'uint256[]' }], outputs: [{ type: 'uint256' }] }], functionName: 'createTriples', args: [['0x' + '00'.repeat(32)], ['0x' + '00'.repeat(32)], ['0x' + '00'.repeat(32)], [OPS[op].value]] });
+    } catch (e) { out.push('· ' + op + ': encode failed'); continue; }
+    try {
+      const exec = s.encodePacked(['address', 'uint256', 'bytes'], [MULTIVAULT, OPS[op].value, inner]);
+      await pub.call({ from: AGENT, to: DM, value: 0n, data: s.encodeFunctionData({ abi: [{ type: 'function', name: 'redeemDelegations', stateMutability: 'nonpayable', inputs: [{ type: 'bytes[]' }, { type: 'bytes32[]' }, { type: 'bytes[]' }], outputs: [{ type: 'bytes[]' }] }], functionName: 'redeemDelegations', args: [[pc], ['0x' + '0'.repeat(63) + '1'], [exec]] }) });
+      out.push('✔ ' + op + ' admitted by the enforcers');
+    } catch (e) {
+      const named = /([A-Za-z_]+Enforcer:[a-z-]+)/.exec(e.shortMessage || e.message || '')?.[1];
+      if (named) out.push('✘ ' + op + ' BLOCKED — ' + named);
+      else if (/155ff427/.test(String(e.data || ''))) out.push('✔ ' + op + ' passed the enforcers');
+      else out.push('· ' + op + ': ' + (e.shortMessage || e.message || '').slice(0, 80));
+    }
+  }
+  setStatus('verifyStatus', out.join('<br>'), out.some(x => x.startsWith('✘')) ? 'error' : 'success');
+}
+function copyResult() {
+  const t = $('signedResult').textContent;
+  const done = ok => setStatus('verifyStatus', ok ? 'Copied JSON to clipboard.' : 'Copy failed — select the text and copy manually.', ok ? 'success' : 'error');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).then(() => done(true)).catch(() => done(false));
+  } else done(false);
+}
+function downloadResult() {
+  const blob = new Blob([$('signedResult').textContent], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'signed-delegation.json'; a.click();
+}
+window.addEventListener('load', async () => {
+  predictHybrid().then(p => { $('predictedAddress').textContent = p.predicted; }).catch(() => {});
+});
+</script>
+</body>
+</html>
